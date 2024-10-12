@@ -1,0 +1,1 @@
+https://github.com/aymeam/Datasets-for-Hate-Speech-Detection

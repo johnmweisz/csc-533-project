@@ -1,0 +1,5 @@
+gtts
+SpeechRecognition 
+scikit-learn 
+nltk 
+pandas

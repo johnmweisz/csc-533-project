@@ -11,7 +11,7 @@ import re
 nltk.download('stopwords')
 
 #Load dataset using pandas
-df = pd.read_csv('data/offensive_sentences.csv')
+df = pd.read_csv('data/labeled_data.csv')
 
 #Fix text from csv
 def preprocess_text(text):

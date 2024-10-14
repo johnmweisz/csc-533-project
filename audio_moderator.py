@@ -91,14 +91,14 @@ def privacy_adapter(cleaned_text, noise_level=0.1):
     noisy_text = ' '.join(tokens)
     return noisy_text
 
-def classify_text(pipeline, text):
-    cleaned_text = preprocess_text(text)
-    noisy_text = privacy_adapter(cleaned_text)
-    prediction_text = pipeline.predict([text])
-    prediction_cleaned_text = pipeline.predict([cleaned_text])
-    prediction_noisy_text = pipeline.predict([noisy_text])
+def classify_text(pipeline, text, noise_levels):
     class_mapping = {0: 'hate_speech', 1: 'offensive_language', 2: 'neither'}
-    return class_mapping[prediction_text[0]], class_mapping[prediction_cleaned_text[0]], class_mapping[prediction_noisy_text[0]]
+    cleaned_text = preprocess_text(text)
+    results = {}
+    for noise_level in noise_levels:
+        prediction = pipeline.predict([privacy_adapter(cleaned_text, noise_level)])
+        results[noise_level] = class_mapping[prediction[0]]
+    return results
 
 def audio_to_text(file_path):
     recognizer = sr.Recognizer()
@@ -116,33 +116,27 @@ def audio_to_text(file_path):
         logging.error(f"Error processing the audio file: {e}")
         return None
     
-def process_results(output, filename, result_text, result_clean, result_noise):
+def process_results(output, filename, noise_levels, results):
     classification = '_'.join(filename.replace('.wav', '').split('_')[1:])
+    def label(noise):
+        return f'{noise}_noise'
+    
     if classification not in output:
-        output[classification] = {
-            'classification_count': 0,
-            'raw_count': 0,
-            'clean_count': 0,
-            'noise_count': 0
-        }
-    output[classification]['classification_count'] += 1
-    if result_text in classification:
-        output[classification]['raw_count'] += 1
-    if result_clean in classification:
-        output[classification]['clean_count'] += 1
-    if result_noise in classification:
-        output[classification]['noise_count'] += 1
+        output[classification] = {label(noise) : 0 for noise in noise_levels}
+        output[classification]['target'] = 0
+    
+    output[classification]['target'] += 1
+
+    for noise, result in results.items():
+        if result in classification:
+            output[classification][label(noise)] += 1
 
 def write_to_csv(output):
     with open('results.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['classification', 'classification_count', 'raw_count', 'clean_count', 'noise_count'])
-        for classification in output.keys():
-            writer.writerow([classification, 
-                             output[classification]['classification_count'], 
-                             output[classification]['raw_count'], 
-                             output[classification]['clean_count'], 
-                             output[classification]['noise_count']])
+        writer.writerow(['classification'] + [f'{key}' for key in list(output.values())[0].keys()])
+        for classification, values in output.items():
+             writer.writerow([classification] + list(values.values()))
 
 def main():
     model_path = 'models/text_classification_pipeline.pkl'
@@ -154,15 +148,15 @@ def main():
     
     folder_path = "data/audio"
     output = {}
+    noise_levels = [0, 0.1, 1, 2]
     for filename in os.listdir(folder_path):
         if filename.endswith(".wav"):
             file_path = os.path.join(folder_path, filename)
             text = audio_to_text(file_path)
             if text:
-                result_text, result_clean, result_noise = classify_text(pipeline, text)
-                process_results(output, filename, result_text, result_clean, result_noise)
+                process_results(output, filename, noise_levels, classify_text(pipeline, text, noise_levels))
             else:
-                process_results(output, filename, "audio_to_text_failed", "audio_to_text_failed", "audio_to_text_failed")
+                process_results(output, filename, noise_levels, {noise : "audio_to_text_failed" for noise in noise_levels})
     write_to_csv(output)
 
 if __name__ == "__main__":

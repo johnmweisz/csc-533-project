@@ -1,10 +1,16 @@
 import pandas as pd
 from gtts import gTTS
 import re
+from io import BytesIO
+from pydub import AudioSegment
 
-def text_to_audio(text, filename='output_audio.mp3', lang='en'):
+def text_to_audio(text, filename='output_audio.wav', lang='en'):
     tts = gTTS(text=text, lang=lang, slow=False)
-    tts.save(filename)
+    mp3_fp = BytesIO()
+    tts.write_to_fp(mp3_fp)
+    mp3_fp.seek(0)
+    sound = AudioSegment.from_file(mp3_fp, format='mp3')
+    sound.export(filename, format='wav')
     print(f"Audio file saved as {filename}")
 
 def sanitize_text(text):
@@ -22,7 +28,7 @@ def csv_to_audio(csv_file, dir, lang='en', num_samples=20):
     if not all(col in data.columns for col in required_columns):
         print(f"One or more required columns {required_columns} not found in the CSV file.")
         return
-    
+
     if num_samples is not None:
         data = data.sample(n=num_samples)
 
@@ -32,5 +38,5 @@ def csv_to_audio(csv_file, dir, lang='en', num_samples=20):
         tweet_text = sanitize_text(row['tweet'])
         text_to_audio(tweet_text, output_filename, lang)
 
-
-csv_to_audio('data/labeled_data.csv', dir='data/audio', lang='en')
+if __name__ == '__main__':
+    csv_to_audio('data/labeled_data.csv', dir='data/audio', lang='en')

@@ -8,7 +8,6 @@ import nltk
 import pandas as pd
 import re
 
-
 def preprocess_text(text):
     text = re.sub(r'\W', ' ', text)
     text = text.lower()
@@ -57,13 +56,10 @@ def main():
     for filename in os.listdir(folder_path):
         if filename.endswith(".wav"):
             file_path = os.path.join(folder_path, filename)
-            print(f"Processing file: {file_path}")
             text = audio_to_text(file_path)
             if text is not None:
                 result = classify_text(vectorizer, model, text)
                 print(f"{filename} classified as: {result}")
-            else:
-                print(f"Could not process the audio file: {filename}")
 
 if __name__ == "__main__":
     main()

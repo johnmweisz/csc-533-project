@@ -70,10 +70,13 @@ def train_model():
     
     return pipeline
 
+def privacy_adapter(text):
+   return text 
+
 def classify_text(pipeline, text):
-    cleaned_text = preprocess_text(text)
+    cleaned_text = privacy_adapter(preprocess_text(text))
     prediction = pipeline.predict([cleaned_text])
-    class_mapping = {0: 'Hate Speech', 1: 'Offensive Language', 2: 'Neither'}
+    class_mapping = {0: 'hate_speech', 1: 'offensive_language', 2: 'neither'}
     return class_mapping[prediction[0]]
 
 def audio_to_text(file_path):
@@ -81,8 +84,7 @@ def audio_to_text(file_path):
     try:
         with sr.AudioFile(file_path) as source:
             audio = recognizer.record(source)
-            # You can specify language parameters if needed
-            return recognizer.recognize_google(audio)
+            return recognizer.recognize_google(audio, language='en-US')
     except sr.UnknownValueError:
         logging.error("Google Speech Recognition could not understand audio")
         return None

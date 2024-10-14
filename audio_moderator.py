@@ -97,8 +97,8 @@ def privacy_adapter(cleaned_text, noise_level=0.1):
 def classify_text(pipeline, text):
     cleaned_text = preprocess_text(text)
     noisy_text = privacy_adapter(cleaned_text)
-    prediction_text = pipeline.predict([noisy_text])
-    prediction_cleaned_text = pipeline.predict([noisy_text])
+    prediction_text = pipeline.predict([text])
+    prediction_cleaned_text = pipeline.predict([cleaned_text])
     prediction_noisy_text = pipeline.predict([noisy_text])
     class_mapping = {0: 'hate_speech', 1: 'offensive_language', 2: 'neither'}
     return class_mapping[prediction_text[0]], class_mapping[prediction_cleaned_text[0]], class_mapping[prediction_noisy_text[0]]

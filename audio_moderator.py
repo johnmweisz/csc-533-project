@@ -123,7 +123,8 @@ def process_results(output, filename, result_text, result_clean, result_noise):
             'classification_count': 0,
             'raw_count': 0,
             'clean_count': 0,
-            'noise_count': 0
+            'noise_count': 0,
+            'failed_count': 0
         }
     output[classification]['classification_count'] += 1
     if result_text in classification:
@@ -132,17 +133,20 @@ def process_results(output, filename, result_text, result_clean, result_noise):
         output[classification]['clean_count'] += 1
     if result_noise in classification:
         output[classification]['noise_count'] += 1
+    if result_noise in 'audio_to_text_failed':
+        output[classification]['failed_count'] += 1
 
 def write_to_csv(output):
     with open('results.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
-        writer.writerow(['classification', 'classification_count', 'raw_count', 'clean_count', 'noise_count'])
+        writer.writerow(['classification', 'classification_count', 'raw_count', 'clean_count', 'noise_count', 'failed_count'])
         for classification in output.keys():
             writer.writerow([classification, 
                              output[classification]['classification_count'], 
                              output[classification]['raw_count'], 
                              output[classification]['clean_count'], 
-                             output[classification]['noise_count']])
+                             output[classification]['noise_count'],
+                             output[classification]['failed_count']])
 
 def main():
     model_path = 'models/text_classification_pipeline.pkl'

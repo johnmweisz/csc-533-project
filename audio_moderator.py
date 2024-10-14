@@ -5,17 +5,18 @@ import pandas as pd
 import numpy as np
 import re
 import nltk
-from nltk.corpus import stopwords, wordnet
+from nltk.corpus import stopwords, wordnet, words
 from nltk.stem import WordNetLemmatizer
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import Pipeline
 from sklearn.utils.class_weight import compute_class_weight
 import joblib
 import random
-from nltk.corpus import words
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -49,29 +50,53 @@ def train_model():
     X = df['cleaned_tweet']
     y = df['class']
     
-    # Handle class imbalance
-    class_weights = compute_class_weight(class_weight='balanced', classes=np.unique(y), y=y)
-    class_weight_dict = dict(zip(np.unique(y), class_weights))
-    
-    # Create a pipeline
+    # Define the pipeline with a placeholder for the classifier
     pipeline = Pipeline([
-        ('tfidf', TfidfVectorizer(max_features=5000, ngram_range=(1, 2))),
-        ('clf', LogisticRegression(max_iter=1000, class_weight=class_weight_dict))
+        ('tfidf', TfidfVectorizer()),
+        ('clf', LogisticRegression())
     ])
     
-    # Cross-validation
-    scores = cross_val_score(pipeline, X, y, cv=5, scoring='f1_weighted')
-    logging.info(f'Cross-validation F1 scores: {scores}')
-    logging.info(f'Mean F1 score: {scores.mean()}')
+    # Parameter grid for GridSearchCV
+    param_grid = [
+        {
+            'tfidf__max_features': [3000, 5000, 10000],
+            'tfidf__ngram_range': [(1,1), (1,2), (1,3)],
+            'clf': [LogisticRegression(max_iter=1000)],
+            'clf__C': [0.1, 1, 10, 100],
+            'clf__class_weight': ['balanced']
+        },
+        {
+            'tfidf__max_features': [3000, 5000, 10000],
+            'tfidf__ngram_range': [(1,1), (1,2), (1,3)],
+            'clf': [SVC()],
+            'clf__C': [0.1, 1, 10, 100],
+            'clf__kernel': ['linear', 'rbf'],
+            'clf__class_weight': ['balanced']
+        },
+        {
+            'tfidf__max_features': [3000, 5000, 10000],
+            'tfidf__ngram_range': [(1,1), (1,2), (1,3)],
+            'clf': [RandomForestClassifier()],
+            'clf__n_estimators': [100, 200],
+            'clf__class_weight': ['balanced']
+        }
+    ]
     
-    # Fit the model
-    pipeline.fit(X, y)
+    # Perform grid search
+    grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='f1_weighted', n_jobs=-1)
+    grid_search.fit(X, y)
     
-    # Save the model
-    joblib.dump(pipeline, 'models/text_classification_pipeline.pkl')
+    logging.info(f'Best parameters found: {grid_search.best_params_}')
+    logging.info(f'Best cross-validation score: {grid_search.best_score_}')
+    
+    # Get the best pipeline
+    best_pipeline = grid_search.best_estimator_
+    
+    # Save the best pipeline
+    joblib.dump(best_pipeline, 'models/text_classification_pipeline.pkl')
     logging.info('Model training complete and saved.')
     
-    return pipeline
+    return best_pipeline
 
 def privacy_adapter(cleaned_text, noise_level=0.1):
     tokens = cleaned_text.split()

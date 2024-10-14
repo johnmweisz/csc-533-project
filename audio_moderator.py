@@ -14,6 +14,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import Pipeline
 from sklearn.utils.class_weight import compute_class_weight
 import joblib
+import random
+from nltk.corpus import words
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -22,6 +24,7 @@ logging.basicConfig(level=logging.INFO)
 nltk.download('stopwords', quiet=True)
 nltk.download('wordnet', quiet=True)
 nltk.download('omw-1.4', quiet=True)
+nltk.download('words', quiet=True)
 
 def preprocess_text(text):
     # Remove URLs, mentions, hashtags, and special characters
@@ -70,14 +73,35 @@ def train_model():
     
     return pipeline
 
-def privacy_adapter(text):
-   return text 
+def privacy_adapter(cleaned_text, noise_level=0.1):
+    tokens = cleaned_text.split()
+    
+    # Determine the number of noise words to add
+    num_noise_words = max(1, int(len(tokens) * noise_level))
+    
+    # Get a list of English words from NLTK corpus
+    english_words = words.words()
+    
+    # Select random words to add as noise
+    noise_words = random.choices(english_words, k=num_noise_words)
+    
+    # Insert noise words at random positions in the token list
+    for noise_word in noise_words:
+        insert_position = random.randint(0, len(tokens))
+        tokens.insert(insert_position, noise_word)
+    
+    # Reconstruct the text from tokens
+    noisy_text = ' '.join(tokens)
+    return noisy_text
 
 def classify_text(pipeline, text):
-    cleaned_text = privacy_adapter(preprocess_text(text))
-    prediction = pipeline.predict([cleaned_text])
+    cleaned_text = preprocess_text(text)
+    noisy_text = privacy_adapter(cleaned_text)
+    prediction_text = pipeline.predict([noisy_text])
+    prediction_cleaned_text = pipeline.predict([noisy_text])
+    prediction_noisy_text = pipeline.predict([noisy_text])
     class_mapping = {0: 'hate_speech', 1: 'offensive_language', 2: 'neither'}
-    return class_mapping[prediction[0]]
+    return class_mapping[prediction_text[0]], class_mapping[prediction_cleaned_text[0]], class_mapping[prediction_noisy_text[0]]
 
 def audio_to_text(file_path):
     recognizer = sr.Recognizer()
@@ -110,8 +134,8 @@ def main():
             file_path = os.path.join(folder_path, filename)
             text = audio_to_text(file_path)
             if text:
-                result = classify_text(pipeline, text)
-                print(f"{filename} classified as: {result}")
+                result_text, result_clean, result_noise = classify_text(pipeline, text)
+                print(f"{filename} classified as: \n raw: {result_text} \n cleaned: {result_clean} \n noise: {result_noise}")
             else:
                 print(f"{filename} could not be processed.")
 

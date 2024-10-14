@@ -21,7 +21,7 @@ def get_classification(row):
     class_mapping = {0: 'hate_speech', 1: 'offensive_language', 2: 'neither'}
     return class_mapping[row['class']]
 
-def csv_to_audio(csv_file, dir, lang='en', num_samples=20):
+def csv_to_audio(csv_file, dir, lang='en', num_samples=100):
     data = pd.read_csv(csv_file)
 
     required_columns = ['class', 'tweet']

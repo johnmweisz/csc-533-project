@@ -12,6 +12,8 @@
 
 `pip install -r requirements.txt`
 
+`python -m spacy download en_core_web_sm`
+
 ### ----Generate Synethic Data----
 
 `python data_generator.py`

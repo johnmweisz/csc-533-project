@@ -2,51 +2,67 @@ import os
 import logging
 import speech_recognition as sr
 import pandas as pd
-import numpy as np
 import re
 import nltk
-from nltk.corpus import stopwords, wordnet, words
-from nltk.stem import WordNetLemmatizer
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import Pipeline
-from sklearn.utils.class_weight import compute_class_weight
 import joblib
-import random
-import csv
+import spacy
 
-# Setup logging
+# Setup logging and load necessary models
 logging.basicConfig(level=logging.INFO)
+nlp = spacy.load('en_core_web_sm')
 
-# Ensure NLTK data is downloaded
+# Download necessary NLTK data
 nltk.download('stopwords', quiet=True)
 nltk.download('wordnet', quiet=True)
-nltk.download('omw-1.4', quiet=True)
-nltk.download('words', quiet=True)
 
+# Regex patterns for PII detection
+PII_PATTERNS = {
+    'Email Address': re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'),
+    'Phone Number': re.compile(r'\b\d{10,15}\b'),
+    'Social Security Number': re.compile(r'\b\d{3}-\d{2}-\d{4}\b'),
+    'Credit Card Number': re.compile(r'\b(?:\d[ -]*?){13,16}\b'),
+}
+
+# Preprocess text: remove URLs, special characters, and stopwords, and apply lemmatization
 def preprocess_text(text):
     text = re.sub(r"http\S+|www\S+|https\S+", '', text, flags=re.MULTILINE)
     text = re.sub(r'\@\w+|\#', '', text)
-    text = re.sub(r'[^A-Za-z\s]', '', text)
-    text = text.lower()
-    lemmatizer = WordNetLemmatizer()
-    tokens = text.split()
-    tokens = [lemmatizer.lemmatize(word) for word in tokens if word not in stopwords.words('english')]
+    text = re.sub(r'[^A-Za-z\s]', '', text).lower()
+    lemmatizer = nltk.WordNetLemmatizer()
+    tokens = [lemmatizer.lemmatize(word) for word in text.split() if word not in nltk.corpus.stopwords.words('english')]
     return ' '.join(tokens)
 
+# Check for PII using regex and spaCy NER
+def contains_pii(text):
+    for label, pattern in PII_PATTERNS.items():
+        if pattern.search(text):
+            return True, label
+    
+    # Use spaCy for detecting other PII entities (PERSON, GPE, ORG, DATE)
+    doc = nlp(text)
+    for ent in doc.ents:
+        if ent.label_ in ['PERSON', 'GPE', 'ORG', 'DATE']:
+            return True, f'{ent.label_}: {ent.text}'
+    
+    return False, 'No PII detected'
+
+# Train the classification model with GridSearchCV
 def train_model():
     df = pd.read_csv('data/labeled_data.csv')
     df['cleaned_tweet'] = df['tweet'].apply(preprocess_text)
-    X = df['cleaned_tweet']
-    y = df['class']
+    X, y = df['cleaned_tweet'], df['class']
+
     pipeline = Pipeline([
         ('tfidf', TfidfVectorizer()),
         ('clf', LogisticRegression())
     ])
+    
     param_grid = [
         {
             'tfidf__max_features': [3000, 5000, 10000],
@@ -71,35 +87,30 @@ def train_model():
             'clf__class_weight': ['balanced']
         }
     ]
+    
     grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='f1_weighted', n_jobs=-1)
     grid_search.fit(X, y)
+    
     logging.info(f'Best parameters found: {grid_search.best_params_}')
     logging.info(f'Best cross-validation score: {grid_search.best_score_}')
+    
     best_pipeline = grid_search.best_estimator_
     joblib.dump(best_pipeline, 'models/text_classification_pipeline.pkl')
     logging.info('Model training complete and saved.')
     return best_pipeline
 
-def privacy_adapter(cleaned_text, noise_level=0.1):
-    tokens = cleaned_text.split()
-    num_noise_words = max(1, int(len(tokens) * noise_level))
-    english_words = words.words()
-    noise_words = random.choices(english_words, k=num_noise_words)
-    for noise_word in noise_words:
-        insert_position = random.randint(0, len(tokens))
-        tokens.insert(insert_position, noise_word)
-    noisy_text = ' '.join(tokens)
-    return noisy_text
-
-def classify_text(pipeline, text, noise_levels):
+# Classify text and check for PII
+def classify_text(pipeline, text):
     class_mapping = {0: 'hate_speech', 1: 'offensive_language', 2: 'neither'}
     cleaned_text = preprocess_text(text)
-    results = {}
-    for noise_level in noise_levels:
-        prediction = pipeline.predict([privacy_adapter(cleaned_text, noise_level)])
-        results[noise_level] = class_mapping[prediction[0]]
-    return results
+    prediction = pipeline.predict([cleaned_text])
+    contains, pii_type = contains_pii(cleaned_text)
+    return {
+        'classification': class_mapping[prediction[0]],
+        'pii_detected': pii_type,
+    }
 
+# Convert audio file to text using Google Speech Recognition
 def audio_to_text(file_path):
     recognizer = sr.Recognizer()
     try:
@@ -108,56 +119,34 @@ def audio_to_text(file_path):
             return recognizer.recognize_google(audio, language='en-US')
     except sr.UnknownValueError:
         logging.error("Google Speech Recognition could not understand audio")
-        return None
     except sr.RequestError as e:
-        logging.error(f"Could not request results from Google Speech Recognition service; {e}")
-        return None
+        logging.error(f"Google Speech Recognition request failed: {e}")
     except Exception as e:
         logging.error(f"Error processing the audio file: {e}")
-        return None
-    
-def process_results(output, filename, noise_levels, results):
-    classification = '_'.join(filename.replace('.wav', '').split('_')[1:])
-    def label(noise):
-        return f'{noise}_noise'
-    
-    if classification not in output:
-        output[classification] = {label(noise) : 0 for noise in noise_levels}
-        output[classification]['target'] = 0
-    
-    output[classification]['target'] += 1
+    return None
 
-    for noise, result in results.items():
-        if result in classification:
-            output[classification][label(noise)] += 1
+# Process classification results
+def process_results(filename, results):
+    classification = '_'.join(filename.replace('.wav', '').split('_')[1:])    
+    logging.info(f'Classification: {classification}, Results: {results}')
 
-def write_to_csv(output):
-    with open('results.csv', mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['classification'] + [f'{key}' for key in list(output.values())[0].keys()])
-        for classification, values in output.items():
-             writer.writerow([classification] + list(values.values()))
-
+# Main workflow to classify audio files
 def main():
     model_path = 'models/text_classification_pipeline.pkl'
-    if os.path.exists(model_path):
-        pipeline = joblib.load(model_path)
-        logging.info('Loaded existing model.')
-    else:
-        pipeline = train_model()
+    pipeline = joblib.load(model_path) if os.path.exists(model_path) else train_model()
     
     folder_path = "data/audio"
-    output = {}
-    noise_levels = [0, 0.1, 1, 2]
     for filename in os.listdir(folder_path):
         if filename.endswith(".wav"):
             file_path = os.path.join(folder_path, filename)
             text = audio_to_text(file_path)
             if text:
-                process_results(output, filename, noise_levels, classify_text(pipeline, text, noise_levels))
+                process_results(filename, classify_text(pipeline, text))
             else:
-                process_results(output, filename, noise_levels, {noise : "audio_to_text_failed" for noise in noise_levels})
-    write_to_csv(output)
+                process_results(filename, {
+                    'classification': "audio_to_text_failed",
+                    'pii_detected': "audio_to_text_failed"
+                })
 
 if __name__ == "__main__":
     main()

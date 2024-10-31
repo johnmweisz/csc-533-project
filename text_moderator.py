@@ -99,54 +99,45 @@ def train_model():
     logging.info('Model training complete and saved.')
     return best_pipeline
 
+# Map class label to a human-readable format
+def label(classification):
+    class_mapping = {0: 'hate_speech', 1: 'offensive_language', 2: 'neither'}
+    return class_mapping[classification]
+
 # Classify text and check for PII
 def classify_text(pipeline, text):
-    class_mapping = {0: 'hate_speech', 1: 'offensive_language', 2: 'neither'}
     cleaned_text = preprocess_text(text)
     prediction = pipeline.predict([cleaned_text])
     contains, pii_type = contains_pii(cleaned_text)
     return {
-        'classification': class_mapping[prediction[0]],
+        'classification': label(prediction[0]),
         'pii_detected': pii_type,
     }
 
-# Convert audio file to text using Google Speech Recognition
-def audio_to_text(file_path):
-    recognizer = sr.Recognizer()
+# Function to read the CSV file and extract the tweets
+def read_data(file_path):
     try:
-        with sr.AudioFile(file_path) as source:
-            audio = recognizer.record(source)
-            return recognizer.recognize_google(audio, language='en-US')
-    except sr.UnknownValueError:
-        logging.error("Google Speech Recognition could not understand audio")
-    except sr.RequestError as e:
-        logging.error(f"Google Speech Recognition request failed: {e}")
+        df = pd.read_csv(file_path)        
+        return list(zip(df['tweet'], df['class']))
     except Exception as e:
-        logging.error(f"Error processing the audio file: {e}")
-    return None
+        logging.error(f"Error reading the file: {e}")
+        return None
 
 # Process classification results
-def process_results(filename, results):
-    classification = '_'.join(filename.replace('.wav', '').split('_')[1:])    
-    logging.info(f'Classification: {classification}, Results: {results}')
+def process_results(classification, results):
+    logging.info(f'Classification: {label(classification)}, Results: {results}')
 
 # Main workflow to classify audio files
 def main():
     model_path = 'models/text_classification_pipeline.pkl'
     pipeline = joblib.load(model_path) if os.path.exists(model_path) else train_model()
     
-    folder_path = "data/audio"
-    for filename in os.listdir(folder_path):
-        if filename.endswith(".wav"):
-            file_path = os.path.join(folder_path, filename)
-            text = audio_to_text(file_path)
-            if text:
-                process_results(filename, classify_text(pipeline, text))
-            else:
-                process_results(filename, {
-                    'classification': "audio_to_text_failed",
-                    'pii_detected': "audio_to_text_failed"
-                })
+    filename = "data/labeled_data.csv"
+    data = read_data(filename)
+    if data:
+        for text, classification in data:
+            results = classify_text(pipeline, text)
+            process_results(classification, results)
 
 if __name__ == "__main__":
     main()

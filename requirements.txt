@@ -1,5 +1,4 @@
-gtts
-SpeechRecognition 
+gtts 
 scikit-learn 
 nltk
 pydub

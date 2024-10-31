@@ -1,6 +1,5 @@
 import os
 import logging
-import speech_recognition as sr
 import pandas as pd
 import re
 import nltk

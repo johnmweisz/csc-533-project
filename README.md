@@ -1,9 +1,8 @@
 # csc-533-project
 
-#### install python libraries
+### install python libraries
 
 `pip install -r requirements.txt`
-
 
 ### ----Text Content Moderator----
 

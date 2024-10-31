@@ -28,7 +28,6 @@ PII_PATTERNS = {
     'Credit Card Number': re.compile(r'\b(?:\d[ -]*?){13,16}\b'),
 }
 
-# Preprocess text: remove URLs, special characters, and stopwords, and apply lemmatization
 def preprocess_text(text):
     text = re.sub(r"http\S+|www\S+|https\S+", '', text, flags=re.MULTILINE)
     text = re.sub(r'\@\w+|\#', '', text)
@@ -37,21 +36,17 @@ def preprocess_text(text):
     tokens = [lemmatizer.lemmatize(word) for word in text.split() if word not in nltk.corpus.stopwords.words('english')]
     return ' '.join(tokens)
 
-# Check for PII using regex and spaCy NER
-def contains_pii(text):
+def predict_pii(text):
     for label, pattern in PII_PATTERNS.items():
         if pattern.search(text):
             return True, label
-    
-    # Use spaCy for detecting other PII entities (PERSON, GPE, ORG, DATE)
     doc = nlp(text)
     for ent in doc.ents:
         if ent.label_ in ['PERSON', 'GPE', 'ORG', 'DATE']:
             return True, f'{ent.label_}: {ent.text}'
     
-    return False, 'No PII detected'
+    return False, label_pii(2)
 
-# Train the classification model with GridSearchCV
 def train_model():
     df = pd.read_csv('data/labeled_data.csv')
     df['cleaned_tweet'] = df['tweet'].apply(preprocess_text)
@@ -98,35 +93,31 @@ def train_model():
     logging.info('Model training complete and saved.')
     return best_pipeline
 
-# Map class label to a human-readable format
-def label(classification):
+def label_hate(classification):
     class_mapping = {0: 'hate_speech', 1: 'offensive_language', 2: 'neither'}
     return class_mapping[classification]
 
-# Classify text and check for PII
+def label_pii(classification):
+    class_mapping = {0: 'not_classified', 1: 'no_pii', 2: 'contains_pii'}
+    return class_mapping[classification]
+
 def classify_text(pipeline, text):
     cleaned_text = preprocess_text(text)
     prediction = pipeline.predict([cleaned_text])
-    contains, pii_type = contains_pii(cleaned_text)
-    return {
-        'classification': label(prediction[0]),
-        'pii_detected': pii_type,
-    }
+    contains, pii_type = predict_pii(cleaned_text)
+    return f'Prediction: {label_hate(prediction[0])} : {label_pii(2 if contains else 1)} {pii_type if contains else ""}'
 
-# Function to read the CSV file and extract the tweets
 def read_data(file_path):
     try:
         df = pd.read_csv(file_path)        
-        return list(zip(df['tweet'], df['class']))
+        return list(zip(df['tweet'], df['class'], df['pii_class']))
     except Exception as e:
         logging.error(f"Error reading the file: {e}")
         return None
 
-# Process classification results
-def process_results(classification, results):
-    logging.info(f'Classification: {label(classification)}, Results: {results}')
+def process_results(hate_class, pii_class, results):
+    logging.info(f'Classification: {label_hate(hate_class)} : {label_pii(pii_class)}, Results: {results}')
 
-# Main workflow to classify audio files
 def main():
     model_path = 'models/text_classification_pipeline.pkl'
     pipeline = joblib.load(model_path) if os.path.exists(model_path) else train_model()
@@ -134,9 +125,9 @@ def main():
     filename = "data/labeled_data.csv"
     data = read_data(filename)
     if data:
-        for text, classification in data:
+        for text, hate_class, pii_class in data:
             results = classify_text(pipeline, text)
-            process_results(classification, results)
+            process_results(hate_class, pii_class, results)
 
 if __name__ == "__main__":
     main()

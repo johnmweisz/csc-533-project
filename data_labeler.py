@@ -1,5 +1,5 @@
 import pandas as pd
-from text_moderator import predict_pii
+from text_moderator import predict_pii, preprocess_text
 
 file_path = 'data/labeled_data.csv'
 df = pd.read_csv(file_path)
@@ -8,7 +8,7 @@ for index, row in df.iterrows():
     text = row['tweet']
     if row['pii_class'] != 0:
         continue
-    if not predict_pii(text)[0]:
+    if not predict_pii(preprocess_text(text))[0]:
         df.at[index, 'pii_class'] = 1
         continue
     

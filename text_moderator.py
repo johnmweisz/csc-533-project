@@ -11,6 +11,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import Pipeline
 import joblib
 import spacy
+import matplotlib.pyplot as plt
 
 # Setup logging and load necessary models
 logging.basicConfig(level=logging.INFO)
@@ -115,8 +116,19 @@ def read_data(file_path):
         logging.error(f"Error reading the file: {e}")
         return None
 
-def process_results(hate_class, pii_class, results):
-    logging.info(f'Classification: {label_hate(hate_class)} : {label_pii(pii_class)}, Results: {results}')
+def process_results(hate_class, pii_class, results, pii_class_counts):
+    pii_label = label_pii(pii_class)
+    if pii_label in pii_class_counts.keys():
+        pii_class_counts[pii_label] += 1
+    else:
+        pii_class_counts[pii_label] = 1
+    logging.info(f'Classification: {label_hate(hate_class)} : {pii_label}, Results: {results}')
+
+def create_histogram(pii_class_counts):
+    plt.bar(pii_class_counts.keys(), pii_class_counts.values(), 0.2, color='#89CFF0')
+    plt.xlabel('PII Classification')
+    plt.ylabel('# of Tweets')
+    plt.show()
 
 def main():
     model_path = 'models/text_classification_pipeline.pkl'
@@ -124,10 +136,12 @@ def main():
     
     filename = "data/labeled_data.csv"
     data = read_data(filename)
+    pii_class_counts = {}
     if data:
         for text, hate_class, pii_class in data:
             results = classify_text(pipeline, text)
-            process_results(hate_class, pii_class, results)
+            process_results(hate_class, pii_class, results, pii_class_counts)
+    create_histogram(pii_class_counts)
 
 if __name__ == "__main__":
     main()

@@ -4,3 +4,4 @@ nltk
 pydub
 pandas
 spacy
+matplotlib

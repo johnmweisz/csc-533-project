@@ -141,7 +141,7 @@ def create_histogram(predict_pii_class_counts, actual_pii_class_counts):
 
     # Set the labels and ticks for the x-axis
     ax.set_xlabel('PII Classification')
-    ax.set_xticks(r1 + 1.5*barWidth)
+    ax.set_xticks(r1 + .5*barWidth)
 
     # Labels for x-axis
     ax.set_xticklabels(actual_pii_class_counts.keys())

@@ -103,13 +103,18 @@ def label_pii(classification):
     class_mapping = {0: 'not_classified', 1: 'no_pii', 2: 'contains_pii'}
     return class_mapping[classification]
 
-def classify_text(pipeline, text, predict_pii_class_counts):
+def classify_text(pipeline, text, hate_class, pii_class, predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts):
     cleaned_text = preprocess_text(text)
+
+    if pii_class != 0:
+        predicted_contains_pii, predicted_pii_type = predict_pii(cleaned_text)
+        predict_pii_class_counts['contains_pii' if predicted_contains_pii else 'no_pii'] += 1
+        actual_pii_class_counts['contains_pii' if pii_class == 2 else 'no_pii'] += 1
+
     prediction = pipeline.predict([cleaned_text])
-    contains, pii_type = predict_pii(cleaned_text)
-    pii_label = label_pii(2 if contains else 1)
-    predict_pii_class_counts[pii_label] += 1
-    return f'Prediction: {label_hate(prediction[0])} : {pii_label} {pii_type if contains else ""}'
+    predicted_hate_class = prediction[0]
+    predict_hate_class_counts['no_hate' if predicted_hate_class != 2 else 'contains_hate'] += 1
+    actual_hate_class_counts['no_hate' if hate_class != 2 else 'contains_hate'] += 1
 
 def read_data(file_path):
     try:
@@ -119,12 +124,7 @@ def read_data(file_path):
         logging.error(f"Error reading the file: {e}")
         return None
 
-def process_results(hate_class, pii_class, results, actual_pii_class_counts):
-    pii_label = label_pii(pii_class)
-    actual_pii_class_counts[pii_label] += 1
-    logging.info(f'Classification: {label_hate(hate_class)} : {pii_label}, Results: {results}')
-
-def create_histogram(predict_pii_class_counts, actual_pii_class_counts):
+def create_histogram(predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts):
     barWidth = 0.2 # Width of bars in the histogram
     predict_bar = predict_pii_class_counts.values() # Counts for PII Classification Predictions
     actual_bar = actual_pii_class_counts.values() # Counts for actual PII Classification
@@ -156,13 +156,14 @@ def main():
     
     filename = "data/labeled_data.csv"
     data = read_data(filename)
-    predict_pii_class_counts = {'not_classified': 0, 'no_pii': 0, 'contains_pii': 0}
-    actual_pii_class_counts = {'not_classified': 0, 'no_pii': 0, 'contains_pii': 0}
+    predict_pii_class_counts = {'no_pii': 0, 'contains_pii': 0}
+    actual_pii_class_counts = {'no_pii': 0, 'contains_pii': 0}
+    predict_hate_class_counts = {'no_hate': 0, 'contains_hate': 0}
+    actual_hate_class_counts = {'no_hate': 0, 'contains_hate': 0}
     if data:
         for text, hate_class, pii_class in data:
-            results = classify_text(pipeline, text, predict_pii_class_counts)
-            process_results(hate_class, pii_class, results, actual_pii_class_counts)
-    create_histogram(predict_pii_class_counts, actual_pii_class_counts)
+            classify_text(pipeline, text, hate_class, pii_class, predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts)
+    create_histogram(predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts)
 
 if __name__ == "__main__":
     main()

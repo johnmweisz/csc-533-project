@@ -113,8 +113,8 @@ def classify_text(pipeline, text, hate_class, pii_class, predict_pii_class_count
 
     prediction = pipeline.predict([cleaned_text])
     predicted_hate_class = prediction[0]
-    predict_hate_class_counts['no_hate' if predicted_hate_class != 2 else 'contains_hate'] += 1
-    actual_hate_class_counts['no_hate' if hate_class != 2 else 'contains_hate'] += 1
+    predict_hate_class_counts['contains_hate' if predicted_hate_class != 2 else 'no_hate'] += 1
+    actual_hate_class_counts['contains_hate' if hate_class != 2 else 'no_hate'] += 1
 
 def read_data(file_path):
     try:

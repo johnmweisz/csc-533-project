@@ -11,6 +11,8 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import Pipeline
 import joblib
 import spacy
+import numpy as np
+import matplotlib.pyplot as plt
 
 # Setup logging and load necessary models
 logging.basicConfig(level=logging.INFO)
@@ -101,11 +103,18 @@ def label_pii(classification):
     class_mapping = {0: 'not_classified', 1: 'no_pii', 2: 'contains_pii'}
     return class_mapping[classification]
 
-def classify_text(pipeline, text):
+def classify_text(pipeline, text, hate_class, pii_class, predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts):
     cleaned_text = preprocess_text(text)
+
+    if pii_class != 0:
+        predicted_contains_pii, predicted_pii_type = predict_pii(cleaned_text)
+        predict_pii_class_counts['contains_pii' if predicted_contains_pii else 'no_pii'] += 1
+        actual_pii_class_counts['contains_pii' if pii_class == 2 else 'no_pii'] += 1
+
     prediction = pipeline.predict([cleaned_text])
-    contains, pii_type = predict_pii(cleaned_text)
-    return f'Prediction: {label_hate(prediction[0])} : {label_pii(2 if contains else 1)} {pii_type if contains else ""}'
+    predicted_hate_class = prediction[0]
+    predict_hate_class_counts['no_hate' if predicted_hate_class != 2 else 'contains_hate'] += 1
+    actual_hate_class_counts['no_hate' if hate_class != 2 else 'contains_hate'] += 1
 
 def read_data(file_path):
     try:
@@ -115,8 +124,52 @@ def read_data(file_path):
         logging.error(f"Error reading the file: {e}")
         return None
 
-def process_results(hate_class, pii_class, results):
-    logging.info(f'Classification: {label_hate(hate_class)} : {label_pii(pii_class)}, Results: {results}')
+import numpy as np
+import matplotlib.pyplot as plt
+
+def create_histogram(predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts):
+    barWidth = 0.2  # Width of bars in the histogram
+
+    # Extract data from dictionaries
+    predict_pii_bar = list(predict_pii_class_counts.values())
+    actual_pii_bar = list(actual_pii_class_counts.values())
+    predict_hate_bar = list(predict_hate_class_counts.values())
+    actual_hate_bar = list(actual_hate_class_counts.values())
+
+    # Combine labels for PII and Hate classifications
+    pii_labels = list(predict_pii_class_counts.keys())
+    hate_labels = list(predict_hate_class_counts.keys())
+    labels = pii_labels + hate_labels
+
+    # Create bar positions
+    x_positions = np.arange(len(labels))
+    r1 = x_positions - barWidth  # PII Prediction
+    r2 = x_positions  # PII Actual
+    r3 = x_positions + barWidth  # Hate Prediction
+    r4 = x_positions + 2 * barWidth  # Hate Actual
+
+    # Create the figure for the histogram plot
+    fig, ax = plt.subplots(dpi=120, figsize=(10, 6))
+
+    # Plot the bars
+    ax.bar(r1[:len(pii_labels)], predict_pii_bar, width=barWidth, color='#89CFF0', label='PII Prediction')
+    ax.bar(r2[:len(pii_labels)], actual_pii_bar, width=barWidth, color='#2d7f5e', label='PII Actual')
+    ax.bar(r3[len(pii_labels):], predict_hate_bar, width=barWidth, color='#f4a261', label='Hate Prediction')
+    ax.bar(r4[len(pii_labels):], actual_hate_bar, width=barWidth, color='#e76f51', label='Hate Actual')
+
+    # Set the labels and ticks for the x-axis
+    ax.set_xlabel('Classifications')
+    ax.set_xticks(x_positions + barWidth / 2)
+    ax.set_xticklabels(labels, rotation=45)
+
+    # Add labels, legend, and grid
+    ax.set_ylabel('Counts')
+    ax.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left')
+    ax.grid(axis='y', linestyle='--', alpha=0.7)
+
+    # Adjust layout and display the plot
+    plt.tight_layout()
+    plt.show()
 
 def main():
     model_path = 'models/text_classification_pipeline.pkl'
@@ -124,10 +177,14 @@ def main():
     
     filename = "data/labeled_data.csv"
     data = read_data(filename)
+    predict_pii_class_counts = {'no_pii': 0, 'contains_pii': 0}
+    actual_pii_class_counts = {'no_pii': 0, 'contains_pii': 0}
+    predict_hate_class_counts = {'no_hate': 0, 'contains_hate': 0}
+    actual_hate_class_counts = {'no_hate': 0, 'contains_hate': 0}
     if data:
         for text, hate_class, pii_class in data:
-            results = classify_text(pipeline, text)
-            process_results(hate_class, pii_class, results)
+            classify_text(pipeline, text, hate_class, pii_class, predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts)
+    create_histogram(predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts)
 
 if __name__ == "__main__":
     main()

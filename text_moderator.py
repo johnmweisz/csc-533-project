@@ -124,31 +124,52 @@ def read_data(file_path):
         logging.error(f"Error reading the file: {e}")
         return None
 
-def create_histogram(predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts):
-    barWidth = 0.2 # Width of bars in the histogram
-    predict_bar = predict_pii_class_counts.values() # Counts for PII Classification Predictions
-    actual_bar = actual_pii_class_counts.values() # Counts for actual PII Classification
+import numpy as np
+import matplotlib.pyplot as plt
 
-    r1 = np.arange(len(predict_bar)) # Range for x-axis
-    r2 = r1 + barWidth
+def create_histogram(predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts):
+    barWidth = 0.2  # Width of bars in the histogram
+
+    # Extract data from dictionaries
+    predict_pii_bar = list(predict_pii_class_counts.values())
+    actual_pii_bar = list(actual_pii_class_counts.values())
+    predict_hate_bar = list(predict_hate_class_counts.values())
+    actual_hate_bar = list(actual_hate_class_counts.values())
+
+    # Combine labels for PII and Hate classifications
+    pii_labels = list(predict_pii_class_counts.keys())
+    hate_labels = list(predict_hate_class_counts.keys())
+    labels = pii_labels + hate_labels
+
+    # Create bar positions
+    x_positions = np.arange(len(labels))
+    r1 = x_positions - barWidth  # PII Prediction
+    r2 = x_positions  # PII Actual
+    r3 = x_positions + barWidth  # Hate Prediction
+    r4 = x_positions + 2 * barWidth  # Hate Actual
 
     # Create the figure for the histogram plot
-    fig, ax = plt.subplots(dpi=120)
+    fig, ax = plt.subplots(dpi=120, figsize=(10, 6))
 
-    # Plot the bars for prediction and actual counts
-    ax.bar(r1, predict_bar, width=barWidth, color='#89CFF0', label='Prediction')
-    ax.bar(r2, actual_bar, width=barWidth, color='#2d7f5e', label='Actual')
+    # Plot the bars
+    ax.bar(r1[:len(pii_labels)], predict_pii_bar, width=barWidth, color='#89CFF0', label='PII Prediction')
+    ax.bar(r2[:len(pii_labels)], actual_pii_bar, width=barWidth, color='#2d7f5e', label='PII Actual')
+    ax.bar(r3[len(pii_labels):], predict_hate_bar, width=barWidth, color='#f4a261', label='Hate Prediction')
+    ax.bar(r4[len(pii_labels):], actual_hate_bar, width=barWidth, color='#e76f51', label='Hate Actual')
 
     # Set the labels and ticks for the x-axis
-    ax.set_xlabel('PII Classification')
-    ax.set_xticks(r1 + .5*barWidth)
+    ax.set_xlabel('Classifications')
+    ax.set_xticks(x_positions + barWidth / 2)
+    ax.set_xticklabels(labels, rotation=45)
 
-    # Labels for x-axis
-    ax.set_xticklabels(actual_pii_class_counts.keys())
+    # Add labels, legend, and grid
+    ax.set_ylabel('Counts')
+    ax.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left')
+    ax.grid(axis='y', linestyle='--', alpha=0.7)
 
-    ax.legend(bbox_to_anchor=(1.0, 1.0)) # Add a legend to the plot
-
-    plt.show() # Display the plot
+    # Adjust layout and display the plot
+    plt.tight_layout()
+    plt.show()
 
 def main():
     model_path = 'models/text_classification_pipeline.pkl'

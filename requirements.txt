@@ -4,5 +4,6 @@ nltk
 pydub
 pandas
 spacy
+joblib
 numpy
 matplotlib

@@ -14,21 +14,26 @@ import spacy
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Setup logging and load necessary models
 logging.basicConfig(level=logging.INFO)
 nlp = spacy.load('en_core_web_sm')
 
-# Download necessary NLTK data
 nltk.download('stopwords', quiet=True)
 nltk.download('wordnet', quiet=True)
 
-# Regex patterns for PII detection
 PII_PATTERNS = {
     'Email Address': re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'),
     'Phone Number': re.compile(r'\b\d{10,15}\b'),
     'Social Security Number': re.compile(r'\b\d{3}-\d{2}-\d{4}\b'),
     'Credit Card Number': re.compile(r'\b(?:\d[ -]*?){13,16}\b'),
 }
+
+def read_data(file_path):
+    try:
+        df = pd.read_csv(file_path)        
+        return list(zip(df['tweet'], df['class'], df['pii_class']))
+    except Exception as e:
+        logging.error(f"Error reading the file: {e}")
+        return None
 
 def preprocess_text(text):
     text = re.sub(r"http\S+|www\S+|https\S+", '', text, flags=re.MULTILINE)
@@ -103,71 +108,90 @@ def label_pii(classification):
     class_mapping = {0: 'not_classified', 1: 'no_pii', 2: 'contains_pii'}
     return class_mapping[classification]
 
-def classify_text(pipeline, text, hate_class, pii_class, predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts):
+def classify_text(pipeline, text, hate_class, pii_class, counts):
     cleaned_text = preprocess_text(text)
 
     if pii_class != 0:
         predicted_contains_pii, predicted_pii_type = predict_pii(cleaned_text)
-        predict_pii_class_counts['contains_pii' if predicted_contains_pii else 'no_pii'] += 1
-        actual_pii_class_counts['contains_pii' if pii_class == 2 else 'no_pii'] += 1
+        predicted_pii_class = 2 if predicted_contains_pii else 1
+        predicted_pii_label = label_pii(predicted_pii_class)
+        actual_pii_label = label_pii(pii_class)
+
+        counts['correct_pii'] += (predicted_pii_label == actual_pii_label)
+        counts['wrong_pii'] += (predicted_pii_label != actual_pii_label)
+        counts['predict_pii'] += (predicted_pii_label == 'contains_pii')
+        counts['actual_pii'] += (actual_pii_label == 'contains_pii')
 
     prediction = pipeline.predict([cleaned_text])
     predicted_hate_class = prediction[0]
-    predict_hate_class_counts['contains_hate' if predicted_hate_class != 2 else 'no_hate'] += 1
-    actual_hate_class_counts['contains_hate' if hate_class != 2 else 'no_hate'] += 1
+    predicted_hate_label = label_hate(predicted_hate_class)
+    actual_hate_label = label_hate(hate_class)
 
-def read_data(file_path):
-    try:
-        df = pd.read_csv(file_path)        
-        return list(zip(df['tweet'], df['class'], df['pii_class']))
-    except Exception as e:
-        logging.error(f"Error reading the file: {e}")
-        return None
+    counts['correct_hate'] += (predicted_hate_label == actual_hate_label)
+    counts['wrong_hate'] += (predicted_hate_label != actual_hate_label)
+    counts['predict_hate'] += (predicted_hate_label != 'neither')
+    counts['actual_hate'] += (actual_hate_label != 'neither')
 
-import numpy as np
-import matplotlib.pyplot as plt
+def create_histogram_acc(counts):
+    correct_pii = counts['correct_pii']
+    wrong_pii = counts['wrong_pii']
+    correct_hate = counts['correct_hate']
+    wrong_hate = counts['wrong_hate']
+    barWidth = 0.5
 
-def create_histogram(predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts):
-    barWidth = 0.2  # Width of bars in the histogram
+    total_pii = correct_pii + wrong_pii
+    total_hate = correct_hate + wrong_hate
+    pii_accuracy = (correct_pii / total_pii * 100)
+    hate_accuracy = (correct_hate / total_hate * 100)
 
-    # Extract data from dictionaries
-    predict_pii_bar = list(predict_pii_class_counts.values())
-    actual_pii_bar = list(actual_pii_class_counts.values())
-    predict_hate_bar = list(predict_hate_class_counts.values())
-    actual_hate_bar = list(actual_hate_class_counts.values())
+    labels = [f'Contains PII \n ({pii_accuracy:.0f}%)', 
+              f'Contains Hate \n ({hate_accuracy:.0f}%)']
+    accuracies = [pii_accuracy, hate_accuracy]
 
-    # Combine labels for PII and Hate classifications
-    pii_labels = list(predict_pii_class_counts.keys())
-    hate_labels = list(predict_hate_class_counts.keys())
-    labels = pii_labels + hate_labels
-
-    # Create bar positions
     x_positions = np.arange(len(labels))
-    r1 = x_positions - barWidth  # PII Prediction
-    r2 = x_positions  # PII Actual
-    r3 = x_positions + barWidth  # Hate Prediction
-    r4 = x_positions + 2 * barWidth  # Hate Actual
 
-    # Create the figure for the histogram plot
-    fig, ax = plt.subplots(dpi=120, figsize=(10, 6))
+    fig, ax = plt.subplots(dpi=120, figsize=(8, 6))
 
-    # Plot the bars
-    ax.bar(r1[:len(pii_labels)], predict_pii_bar, width=barWidth, color='#89CFF0', label='PII Prediction')
-    ax.bar(r2[:len(pii_labels)], actual_pii_bar, width=barWidth, color='#2d7f5e', label='PII Actual')
-    ax.bar(r3[len(pii_labels):], predict_hate_bar, width=barWidth, color='#f4a261', label='Hate Prediction')
-    ax.bar(r4[len(pii_labels):], actual_hate_bar, width=barWidth, color='#e76f51', label='Hate Actual')
+    ax.bar(x_positions, accuracies, width=barWidth, color='#89CFF0', label='Accuracy (%)')
 
-    # Set the labels and ticks for the x-axis
     ax.set_xlabel('Classifications')
-    ax.set_xticks(x_positions + barWidth / 2)
+    ax.set_xticks(x_positions)
     ax.set_xticklabels(labels, rotation=45)
-
-    # Add labels, legend, and grid
-    ax.set_ylabel('Counts')
-    ax.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left')
+    ax.set_ylabel('Accuracy (%)')
+    ax.set_ylim(0, 100)
+    ax.legend(loc='upper left')
     ax.grid(axis='y', linestyle='--', alpha=0.7)
 
-    # Adjust layout and display the plot
+    plt.tight_layout()
+    plt.show()
+
+def create_histogram_count(counts):
+    predict_pii_count = counts['predict_pii']
+    actual_pii_count = counts['actual_pii']
+    predict_hate_count = counts['predict_hate']
+    actual_hate_count = counts['actual_hate']
+    barWidth = 0.4
+
+    labels = ['Contains PII', 'Contains Hate']
+    predict_values = [predict_pii_count, predict_hate_count]
+    actual_values = [actual_pii_count, actual_hate_count]
+
+    x_positions = np.arange(len(labels))
+    r1 = x_positions - barWidth / 2
+    r2 = x_positions + barWidth / 2
+
+    fig, ax = plt.subplots(dpi=120, figsize=(8, 6))
+
+    ax.bar(r1, predict_values, width=barWidth, color='#89CFF0', label='Prediction')
+    ax.bar(r2, actual_values, width=barWidth, color='#2d7f5e', label='Actual')
+
+    ax.set_xlabel('Classifications')
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(labels, rotation=45)
+    ax.set_ylabel('Counts')
+    ax.legend(loc='upper left')
+    ax.grid(axis='y', linestyle='--', alpha=0.7)
+
     plt.tight_layout()
     plt.show()
 
@@ -177,14 +201,23 @@ def main():
     
     filename = "data/labeled_data.csv"
     data = read_data(filename)
-    predict_pii_class_counts = {'no_pii': 0, 'contains_pii': 0}
-    actual_pii_class_counts = {'no_pii': 0, 'contains_pii': 0}
-    predict_hate_class_counts = {'no_hate': 0, 'contains_hate': 0}
-    actual_hate_class_counts = {'no_hate': 0, 'contains_hate': 0}
+
+    counts = {
+        'correct_pii': 0,
+        'wrong_pii': 0,
+        'correct_hate': 0,
+        'wrong_hate': 0,
+        'predict_pii': 0,
+        'actual_pii': 0,
+        'predict_hate': 0,
+        'actual_hate': 0,
+    }
+    
     if data:
         for text, hate_class, pii_class in data:
-            classify_text(pipeline, text, hate_class, pii_class, predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts)
-    create_histogram(predict_pii_class_counts, actual_pii_class_counts, predict_hate_class_counts, actual_hate_class_counts)
+            classify_text(pipeline, text, hate_class, pii_class, counts)
+        create_histogram_acc(counts)
+        create_histogram_count(counts)   
 
 if __name__ == "__main__":
     main()

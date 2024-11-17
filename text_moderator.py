@@ -119,8 +119,12 @@ def classify_text(pipeline, text, hate_class, pii_class, counts):
 
         counts['correct_pii'] += (predicted_pii_label == actual_pii_label)
         counts['wrong_pii'] += (predicted_pii_label != actual_pii_label)
+
         counts['predict_pii'] += (predicted_pii_label == 'contains_pii')
         counts['actual_pii'] += (actual_pii_label == 'contains_pii')
+
+        counts['predict_not_pii'] += (predicted_pii_label == 'no_pii')
+        counts['actual_not_pii'] += (actual_pii_label == 'no_pii')
 
     prediction = pipeline.predict([cleaned_text])
     predicted_hate_class = prediction[0]
@@ -129,8 +133,12 @@ def classify_text(pipeline, text, hate_class, pii_class, counts):
 
     counts['correct_hate'] += (predicted_hate_label == actual_hate_label)
     counts['wrong_hate'] += (predicted_hate_label != actual_hate_label)
+
     counts['predict_hate'] += (predicted_hate_label != 'neither')
     counts['actual_hate'] += (actual_hate_label != 'neither')
+
+    counts['predict_not_hate'] += (predicted_hate_label == 'neither')
+    counts['actual_not_hate'] += (actual_hate_label == 'neither')
 
 def create_histogram_acc(counts):
     correct_pii = counts['correct_pii']
@@ -144,8 +152,8 @@ def create_histogram_acc(counts):
     pii_accuracy = (correct_pii / total_pii * 100)
     hate_accuracy = (correct_hate / total_hate * 100)
 
-    labels = [f'Contains PII \n ({pii_accuracy:.0f}%)', 
-              f'Contains Hate \n ({hate_accuracy:.0f}%)']
+    labels = [f'PII ({pii_accuracy:.0f}%)', 
+              f'Hate ({hate_accuracy:.0f}%)']
     accuracies = [pii_accuracy, hate_accuracy]
 
     x_positions = np.arange(len(labels))
@@ -154,7 +162,7 @@ def create_histogram_acc(counts):
 
     ax.bar(x_positions, accuracies, width=barWidth, color='#89CFF0', label='Accuracy (%)')
 
-    ax.set_xlabel('Classifications')
+    ax.set_xlabel('Prediction')
     ax.set_xticks(x_positions)
     ax.set_xticklabels(labels, rotation=45)
     ax.set_ylabel('Accuracy (%)')
@@ -170,17 +178,21 @@ def create_histogram_count(counts):
     actual_pii_count = counts['actual_pii']
     predict_hate_count = counts['predict_hate']
     actual_hate_count = counts['actual_hate']
+    predict_not_pii_count = counts['predict_not_pii']
+    actual_not_pii_count = counts['actual_not_pii']
+    predict_not_hate_count = counts['predict_not_hate']
+    actual_not_hate_count = counts['actual_not_hate']
     barWidth = 0.4
 
-    labels = ['Contains PII', 'Contains Hate']
-    predict_values = [predict_pii_count, predict_hate_count]
-    actual_values = [actual_pii_count, actual_hate_count]
+    labels = ['Contains PII', 'Contains Hate', 'Not Contains PII', 'Not Contains Hate']
+    predict_values = [predict_pii_count, predict_hate_count, predict_not_pii_count, predict_not_hate_count]
+    actual_values = [actual_pii_count, actual_hate_count, actual_not_pii_count, actual_not_hate_count]
 
     x_positions = np.arange(len(labels))
     r1 = x_positions - barWidth / 2
     r2 = x_positions + barWidth / 2
 
-    fig, ax = plt.subplots(dpi=120, figsize=(8, 6))
+    fig, ax = plt.subplots(dpi=120, figsize=(10, 6))
 
     ax.bar(r1, predict_values, width=barWidth, color='#89CFF0', label='Prediction')
     ax.bar(r2, actual_values, width=barWidth, color='#2d7f5e', label='Actual')
@@ -211,6 +223,10 @@ def main():
         'actual_pii': 0,
         'predict_hate': 0,
         'actual_hate': 0,
+        'predict_not_pii': 0,
+        'actual_not_pii': 0,
+        'predict_not_hate': 0,
+        'actual_not_hate': 0,
     }
     
     if data:

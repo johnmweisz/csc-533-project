@@ -61,7 +61,7 @@ X_actual_tokenized = tokenizer.texts_to_sequences(X_actual)
 X_actual_padded = pad_sequences(X_actual_tokenized, maxlen=max_length, padding='post', truncating='post')
 
 # Predict on the actual dataset
-y_pred = (model.predict(X_actual_padded) > 0.5).astype("int32")
+y_pred = (model.predict(X_actual_padded) > 0.5).astype("int32") + 1
 
 # Add LSTM predictions to the DataFrame
 df_actual['pii_prediction_lstm'] = y_pred
